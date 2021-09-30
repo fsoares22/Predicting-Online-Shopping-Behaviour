@@ -1,0 +1,618 @@
+---
+title: "CSDA 1010 - Lab2 - Group 1"
+output:
+  html_document:
+    df_print: paged
+---
+
+#### Importing libraries
+
+```{r}
+library(plyr); library(dplyr)
+library(Hmisc)
+library(corrplot)
+library(caret)
+library(pROC)
+library(ROCR)
+library(Metrics)
+library(caTools)
+library(rpart.plot)
+library(boot)
+```
+
+#### Importing dataset
+
+```{r}
+data <- read.csv('online_shoppers_intention.csv', header = TRUE)
+```
+
+## Data understanding (Section 2 of the report)
+
+### Dataset structure 
+
+```{r}
+str(data)
+```
+
+### Dataset summary
+
+*examining basic descriptive statistics with "summary" function*
+```{r}
+summary(data)
+```
+
+### Checking for missing values
+
+```{r}
+colSums(is.na(data))
+```
+
+```{r}
+colSums(data=="")
+```
+*dataset does not contain missing values*
+
+### Feature visualizations (Only select visualizations were used/discussed in the report)
+
+#### Revenue
+
+*extracting and plotting the frequency of target feature "Revenue"*
+```{r}
+freq_Revenue=table(data$Revenue)
+head(freq_Revenue)
+```
+```{r}
+barplot(freq_Revenue)
+```
+
+*frequencies are converted to proportions, for better understanding and visualization*
+```{r}
+prop.table(freq_Revenue)
+```
+```{r}
+barplot(prop.table(freq_Revenue))
+```
+
+#### Administrative
+
+*plotting the histogram of "Administrative" feature; analogous plots will be used for other features in continuation, where appropriate*
+```{r}
+hist(data$Administrative, breaks=seq(0,27,1), labels=FALSE)
+```
+
+*visualizing proportions of "Adminstrative" feature against the target "Revenue" feature; analogous plots will be used for other features in continuation*
+```{r}
+freq_Administrative=xtabs(~data$Revenue+data$Administrative)
+prop.table(freq_Administrative)
+```
+```{r}
+barplot(prop.table(freq_Administrative),legend=rownames(freq_Administrative))
+```
+
+*plotting the mosaic plot of frequencies of "Administrative" vs "Revenue" feature, with shaded residual levels for cell/level combinations of the two features; analogous plots will be used for other features in continuation*  
+```{r}
+mosaicplot(freq_Administrative, border = "black",
+           shade = TRUE)
+```
+
+#### Administrative_Duration
+
+```{r}
+hist(data$Administrative_Duration, breaks=seq(0,3400,100))
+```
+
+*breaking down the histogram of "Administrative_Duration" based on the "Revenue" feature; analogous plots will be used in continuation, as appropriate*
+```{r}
+data %>% 
+  ggplot() +
+  aes(x = Administrative_Duration) +
+  geom_histogram(bins = 100, color='darkblue', fill='gray') +
+  facet_grid(Revenue ~ .,
+             scales = "free_y")
+```
+
+#### Informational
+
+```{r}
+hist(data$Informational, breaks=seq(0,24,1), labels=FALSE)
+```
+
+```{r}
+freq_Informational=xtabs(~data$Revenue+data$Informational)
+prop.table(freq_Informational)
+```
+
+```{r}
+barplot(prop.table(freq_Informational),legend=rownames(freq_Informational))
+
+```
+
+```{r}
+mosaicplot(freq_Informational, border = "black",
+           shade = TRUE)
+```
+
+#### Informational_Duration
+
+```{r}
+hist(data$Informational_Duration, breaks=seq(0,2600,100))
+```
+
+```{r}
+data %>% 
+  ggplot() +
+  aes(x = Informational_Duration) +
+  geom_histogram(bins = 100, color='darkblue', fill='gray') +
+  facet_grid(Revenue ~ .,
+             scales = "free_y")
+```
+
+#### ProductRelated
+
+```{r}
+hist(data$ProductRelated,breaks=seq(0,750,50))
+```
+
+```{r}
+data %>% 
+  ggplot() +
+  aes(x = ProductRelated) +
+  geom_histogram(bins = 100, color='darkblue', fill='gray') +
+  facet_grid(Revenue ~ .,
+             scales = "free_y")
+```
+
+#### ProductRelated_Duration
+
+```{r}
+hist(data$ProductRelated_Duration, breaks=seq(0,64000,1000))
+```
+
+*breaking down the histogram of "ProductRelated_Duration" based on the "Revenue" feature to check how whether there is a difference of time spent on product pages in sessions that ended up with transaction*
+```{r}
+data %>% 
+  ggplot() +
+  aes(x = ProductRelated_Duration) +
+  geom_histogram(bins = 100, color='darkblue', fill='gray') +
+  facet_grid(Revenue ~ .,
+             scales = "free_y")
+```
+
+*calculating the range of each bin on the x-axis"*
+```{r}
+(data %>%
+  summarise(max_ProductRelated = max(data$ProductRelated_Duration, na.rm = TRUE)))/100
+```
+
+#### Bounce rates
+
+```{r}
+hist(data$BounceRates)
+```
+
+```{r}
+data %>% 
+  ggplot() +
+  aes(x = BounceRates) +
+  geom_histogram(bins = 100, color='darkblue', fill='gray') +
+  facet_grid(Revenue ~ .,
+             scales = "free_y")
+```
+
+#### Exit rates
+
+```{r}
+hist(data$ExitRates)
+```
+
+```{r}
+data %>% 
+  ggplot() +
+  aes(x = BounceRates) +
+  geom_histogram(bins = 100, color='darkblue', fill='gray') +
+  facet_grid(Revenue ~ .,
+             scales = "free_y")
+```
+
+#### Page values
+
+```{r}
+hist(data$PageValues)
+```
+
+```{r}
+data %>% 
+  ggplot() +
+  aes(x = PageValues) +
+  geom_histogram(bins = 100, color='darkblue', fill='gray') +
+  facet_grid(Revenue ~ .,
+             scales = "free_y")
+```
+
+#### Special day
+
+```{r}
+freq_SpecialDay=xtabs(~data$Revenue+data$SpecialDay)
+prop.table(freq_SpecialDay)
+```
+
+```{r}
+barplot(prop.table(freq_SpecialDay),legend=rownames(freq_SpecialDay))
+```
+
+```{r}
+mosaicplot(freq_SpecialDay, border = "black",
+           shade = TRUE)
+```
+
+#### Operating Systems
+
+```{r}
+freq_OperatingSystems=xtabs(~data$Revenue+data$OperatingSystems)
+prop.table(freq_OperatingSystems)
+```
+
+```{r}
+barplot(prop.table(freq_OperatingSystems),legend=rownames(freq_OperatingSystems))
+```
+
+```{r}
+mosaicplot(freq_OperatingSystems, border = "black",
+           shade = TRUE)
+```
+
+#### Browser
+
+```{r}
+freq_Browser=xtabs(~data$Revenue+data$Browser)
+prop.table(freq_Browser)
+```
+
+```{r}
+barplot(prop.table(freq_Browser),legend=rownames(freq_Browser))
+```
+
+```{r}
+mosaicplot(freq_Browser, border = "black",
+           shade = TRUE)
+```
+
+#### Region
+
+```{r}
+freq_Region=xtabs(~data$Revenue+data$Region)
+prop.table(freq_Region)
+```
+
+```{r}
+barplot(prop.table(freq_Region),legend=rownames(freq_Region))
+```
+
+```{r}
+mosaicplot(freq_Region, border = "black",
+           shade = TRUE)
+```
+
+#### Traffic Type
+
+```{r}
+freq_TrafficType=xtabs(~data$Revenue+data$TrafficType)
+prop.table(freq_TrafficType)
+```
+
+```{r}
+barplot(prop.table(freq_TrafficType),legend=rownames(freq_TrafficType))
+```
+
+```{r}
+mosaicplot(freq_TrafficType, border = "black",
+           shade = TRUE)
+```
+
+#### Visitor Type
+
+```{r}
+freq_VisitorType=xtabs(~data$Revenue+data$VisitorType)
+prop.table(freq_VisitorType)
+```
+
+
+```{r}
+barplot(prop.table(freq_VisitorType),legend=rownames(freq_VisitorType))
+```
+
+```{r}
+mosaicplot(freq_VisitorType, border = "black",
+           shade = TRUE)
+```
+
+#### Weekend
+
+```{r}
+freq_Weekend=xtabs(~data$Revenue+data$Weekend)
+prop.table(freq_Weekend)
+```
+
+```{r}
+barplot(prop.table(freq_Weekend),legend=rownames(freq_Weekend))
+```
+
+```{r}
+mosaicplot(freq_Weekend, border = "black",
+           shade = TRUE)
+```
+
+#### Month
+
+```{r}
+freq_Month=xtabs(~data$Revenue+data$Month)
+prop.table(freq_Month)
+```
+
+```{r}
+barplot(prop.table(freq_Month),legend=rownames(freq_Month))
+```
+
+```{r}
+mosaicplot(freq_Month, border = "black",
+           shade = TRUE)
+```
+
+
+## FEATURE ENGINEERING & MODELLING (Used in Sections 3 and 4 of the report)
+
+### Transforming the dataset for Decision tree
+
+
+```{r}
+dataTree = data
+```
+
+*Changing categorical variables to ordered factors*
+```{r}
+dataTree$OperatingSystems <- factor(dataTree$OperatingSystems, order = TRUE, levels = c(6,3,7,1,5,2,4,8))
+dataTree$Browser <- factor(dataTree$Browser, order = TRUE, levels = c(9,3,6,7,1,2,8,11,4,5,10,13,12))
+dataTree$Region <- factor(dataTree$Region, order = TRUE, levels = c(8,6,3,4,7,1,5,2,9))
+dataTree$TrafficType <- factor(dataTree$TrafficType, order = TRUE, levels = c(12,15,17,18,13,19,3,9,1,6,4,14,11,10,5,2,20,8,7,16))
+dataTree$Month <- factor(dataTree$Month, order = TRUE, levels =c('Feb', 'Mar', 'May', 'June','Jul', 'Aug', 'Sep','Oct', 'Nov','Dec'))
+dataTree$VisitorType <- factor(dataTree$VisitorType, order = TRUE, levels = c('Returning_Visitor', 'Other', 'New_Visitor'))
+```
+
+
+```{r}
+str(dataTree)
+```
+
+### DECISION TREE MODEL 
+
+*Creating train and test datasets with the ratio of 0.8*
+```{r}
+spl = sample.split(dataTree$Revenue, SplitRatio = 0.8)
+train_tree = subset(dataTree, spl==TRUE)
+test_tree = subset(dataTree, spl==FALSE)
+```
+
+*Building decision tree using "rpart"*
+```{r}
+dtree <- rpart(Revenue~., data = train_tree, method = 'class')
+rpart.plot(dtree, extra = 'auto')
+```
+
+*Validate decision tree using complexity parameter (cp) and cross-validation error (xerror)*
+```{r}
+printcp(dtree)
+plotcp(dtree)
+```
+
+*Confirm tree has been correctly pruned by manually selecting CP with minimum xerror*
+```{r}
+ptree<- prune(dtree, cp= dtree$cptable[which.min(dtree$cptable[,'xerror']),'CP'])
+rpart.plot(ptree)
+```
+
+*Figure above shows the tree had been pruned by rpart function*
+
+*Create prediction variable for test data*
+```{r}
+predTree <-predict(ptree, test_tree, type = 'class')
+
+```
+
+*Confusion Matrix*
+```{r}
+confmat_Tree <- table(test_tree$Revenue, predTree)
+confmat_Tree
+```
+
+*Precision*
+```{r}
+precision_Tree <- confmat_Tree[2,2]/(confmat_Tree[2,2] + confmat_Tree[1,2])
+precision_Tree
+```
+
+*Recall*
+```{r}
+recall_Tree <- confmat_Tree[2,2]/ (confmat_Tree[2,2] + confmat_Tree[2,1])
+recall_Tree
+```
+
+*Accuracy*
+```{r}
+accuracy_Tree <- (confmat_Tree[2,2]+confmat_Tree[1,1])/ nrow(test_tree)
+accuracy_Tree
+```
+
+*Balanced Accuracy*
+```{r}
+balancedacc_Tree <- (confmat_Tree[1,1]/(confmat_Tree[1,1] + confmat_Tree[1,2]) + confmat_Tree[2,2]/ (confmat_Tree[2,1] + confmat_Tree[2,2]))/2
+balancedacc_Tree
+```
+
+### Transforming the dataset for Regressions
+
+*Converting logical variables to binary dummy variables*
+```{r}
+dataReg <- data %>%
+  mutate(Revenue_binary = ifelse(Revenue == "FALSE",0,1)) %>%
+  mutate(Weekend_binary = ifelse(Weekend == "FALSE",0,1)) %>%
+  select (-c(Revenue, Weekend))
+```
+
+*Converting factor to numeric variable*
+```{r}
+dataReg$Month <- as.numeric(dataReg$Month)
+dataReg$VisitorType <- as.numeric(dataReg$VisitorType)
+```
+
+```{r}
+str(dataReg)
+```
+
+*Creating correlation matrix*
+```{r}
+cor_result=rcorr(as.matrix(dataReg))
+R2 <-  cor_result$r
+```
+```{r}
+cor_result$r
+```
+
+```{r}
+corrplot(R2, method="circle")
+```
+
+*Creating train and test sets for regression models using ratio of 0.7*
+```{r}
+spl2 = sample.split(dataReg$Revenue, SplitRatio = 0.7)
+trainReg = subset(dataReg, spl2==TRUE)
+testReg = subset(dataReg, spl2==FALSE)
+```
+
+### LINEAR REGRESSION MODEL
+
+*First linear regression including all of the datasets variables*
+```{r}
+lm1 <-lm(ProductRelated_Duration ~., data = dataReg) 
+summary(lm1)
+
+```
+
+*Creating a second linear regression that removed the statisticly insignificant results from the original regression and made the months a binary variable for each month*
+```{r}
+lm2 <- lm(ProductRelated_Duration ~ Administrative + Administrative_Duration + Informational_Duration + ProductRelated + BounceRates + ExitRates + SpecialDay + factor(Month) + VisitorType + Weekend_binary + Revenue_binary, data = dataReg)
+summary(lm2)
+
+par(mfrow=c(2,2))
+plot (lm2)
+```
+
+*Creating a train model*
+```{r}
+trainlm2 <-lm(ProductRelated_Duration ~ Administrative + Administrative_Duration + Informational_Duration + ProductRelated + BounceRates + ExitRates + SpecialDay + factor(Month) + VisitorType + Weekend_binary + Revenue_binary, data = trainReg)
+summary(trainlm2)
+```
+
+*Testing the model*
+```{r}
+testlm2 <-predict(trainlm2, testReg)
+lm2rmse <- rmse(actual = testReg$ProductRelated_Duration,predicted = testlm2)
+print(lm2rmse)
+```
+
+*Testing the new model against the first model using the same train and test data*
+```{r}
+trainlm1 <- lm(ProductRelated_Duration ~., data = trainReg)
+
+testlm1 <-predict(trainlm1, testReg)
+lm1rmse <- rmse(actual = testReg$ProductRelated_Duration,predicted = testlm1)
+print(lm1rmse)
+```
+
+### LOGISTIC REGRESSION MODEL
+
+*Building the model on training data*
+```{r}
+glm = glm(Revenue_binary ~ .,data=trainReg, family=binomial)
+summary(glm)
+```
+
+*Prediction on the training set*
+```{r}
+predictglm = predict(glm, type="response")
+summary(predictglm)
+```
+
+*Using tapply function to compute the average prediction for each of the outcomes*
+```{r}
+tapply(predictglm, trainReg$Revenue_binary, mean)
+```
+
+*Selecting a treshold value*
+```{r}
+ROCRpred = prediction(predictglm, trainReg$Revenue_binary)
+
+```
+
+*Calculating performace function*
+```{r}
+ROCRperf = performance(ROCRpred, "tpr", "fpr")
+
+```
+
+*Plotting ROC curve with treshold labels*
+```{r}
+ROCRperf = performance(ROCRpred, "tpr", "fpr")
+plot(ROCRperf, colorize=TRUE)
+plot(ROCRperf, colorize=TRUE, print.cutoffs.at=seq(0,1,by=0.1), text.adj=c(-0.2,1.7))
+
+```
+
+*Prediction on test set using the selected treshold*
+```{r}
+predictTest = predict(glm, type = "response", newdata = testReg)
+```
+
+```{r}
+table(testReg$Revenue_binary,predictTest >= 0.3)
+```
+
+```{r}
+confmat_Glm <- table(testReg$Revenue_binary,predictTest >= 0.3)
+confmat_Glm
+
+```
+
+*Precision*
+```{r}
+precision_Glm <- confmat_Glm[2,2]/(confmat_Glm[2,2] + confmat_Glm[1,2])
+precision_Glm
+```
+
+*Recall*
+```{r}
+recall_Glm <- confmat_Glm[2,2]/ (confmat_Glm[2,2] + confmat_Glm[2,1])
+recall_Glm
+```
+
+*Accuracy*
+```{r}
+accuracy_Glm <- (confmat_Glm[2,2]+confmat_Glm[1,1])/nrow(testReg)
+accuracy_Glm
+```
+
+*Balanced Accuracy*
+```{r}
+balancedacc_Glm <- (confmat_Glm[1,1]/(confmat_Glm[1,1] + confmat_Glm[1,2]) + confmat_Glm[2,2]/ (confmat_Glm[2,1] + confmat_Glm[2,2]))/2
+balancedacc_Glm
+```
+
+*Root mean square error*
+```{r}
+testReg = testReg %>%
+  mutate(predictions_quad = predict(glm, testReg))
+
+sqrt(testReg %>%
+  summarise(RMSE_glm = mean((Revenue_binary-predictions_quad)^2)))
+```
+
+
